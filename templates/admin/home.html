@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Панель администратора - DineBook</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .booking-card {
+            transition: all 0.3s ease;
+        }
+        .booking-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,.1);
+        }
+        .status-badge {
+            font-size: 0.8rem;
+            padding: 0.5em 1em;
+        }
+        .navbar {
+            margin-bottom: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/admin">DineBook Admin</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/" target="_blank">На сайт</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" onclick="logout()">Выйти</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="row mb-4">
+            <div class="col">
+                <h2>Управление бронированиями</h2>
+            </div>
+        </div>
+
+        <div class="row" id="bookingsContainer">
+            {{range .}}
+            <div class="col-md-6 col-lg-4 mb-4">
+                <div class="card booking-card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <h5 class="card-title mb-0">{{.Name}}</h5>
+                            <span class="badge {{if eq .Status "confirmed"}}bg-success{{else if eq .Status "cancelled"}}bg-danger{{else}}bg-warning{{end}} status-badge">
+                                {{if eq .Status "confirmed"}}Подтверждено{{else if eq .Status "cancelled"}}Отменено{{else}}Ожидает{{end}}
+                            </span>
+                        </div>
+                        <p class="card-text">
+                            <i class="bi bi-telephone"></i> {{.Phone}}<br>
+                            <i class="bi bi-calendar"></i> {{.Date}}<br>
+                            <i class="bi bi-clock"></i> {{.Time}}<br>
+                            <i class="bi bi-people"></i> {{.Guests}} гостей
+                        </p>
+                        {{if .Comments}}
+                        <p class="card-text"><small class="text-muted">{{.Comments}}</small></p>
+                        {{end}}
+                        <div class="btn-group w-100">
+                            {{if eq .Status "pending"}}
+                            <button class="btn btn-success btn-sm" onclick="updateStatus({{.ID}}, 'confirmed')">
+                                <i class="bi bi-check-lg"></i> Подтвердить
+                            </button>
+                            {{end}}
+                            {{if ne .Status "cancelled"}}
+                            <button class="btn btn-danger btn-sm" onclick="updateStatus({{.ID}}, 'cancelled')">
+                                <i class="bi bi-x-lg"></i> Отменить
+                            </button>
+                            {{end}}
+                        </div>
+                    </div>
+                    <div class="card-footer text-muted">
+                        <small>Создано: {{.Created.Format "02.01.2006 15:04"}}</small>
+                    </div>
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        async function updateStatus(id, status) {
+            try {
+                const response = await fetch(`/admin/bookings/${id}/status`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ status })
+                });
+
+                if (response.ok) {
+                    location.reload();
+                } else {
+                    const error = await response.text();
+                    alert('Ошибка при обновлении статуса: ' + error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Произошла ошибка при обновлении статуса');
+            }
+        }
+
+        function logout() {
+            document.cookie = 'session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+            window.location.href = '/admin/login';
+        }
+    </script>
+</body>
+</html> 
