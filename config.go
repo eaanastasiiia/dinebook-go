@@ -13,14 +13,14 @@ type Config struct {
 }
 
 func GetConfig() *Config {
-	// В реальном приложении эти значения должны быть в .env файле
+	// Настройки для Postgres.app по умолчанию
 	return &Config{
 		DBHost:     "localhost",
 		DBPort:     "5432",
 		DBUser:     "postgres",
-		DBPassword: "postgres",
+		DBPassword: "postgres", // Стандартный пароль для Postgres.app
 		DBName:     "dinebook",
-		DBSSLMode:  "disable",
+		DBSSLMode:  "disable", // Для локальной разработки отключаем SSL
 
 		AdminUsername: "admin",
 		AdminPassword: "admin123",
