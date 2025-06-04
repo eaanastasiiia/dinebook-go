@@ -14,11 +14,12 @@ dinebook-go
 # Зависимости
 /vendor/
 
-# IDE
+# IDE и редакторы
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
 
 # Логи
 *.log
@@ -36,4 +37,7 @@ Thumbs.db
 /dist/
 
 # Кэш Go
-go.work 
+go.work
+
+# Пустые директории
+static/js/ 
