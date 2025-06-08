@@ -43,57 +43,119 @@
         </div>
     </nav>
 
-    <div class="container">
-        <div class="row mb-4">
-            <div class="col">
-                <h2>Управление бронированиями</h2>
+    <div class="container mt-4">
+        <h2>Управление бронированиями</h2>
+        
+        <!-- Форма фильтрации -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <form id="filterForm" class="row g-3">
+                    <div class="col-md-3">
+                        <label for="date" class="form-label">Дата</label>
+                        <input type="date" class="form-control" id="date" name="date">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="status" class="form-label">Статус</label>
+                        <select class="form-select" id="status" name="status">
+                            <option value="">Все</option>
+                            <option value="pending">Ожидает</option>
+                            <option value="confirmed">Подтверждено</option>
+                            <option value="cancelled">Отменено</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="phone" class="form-label">Телефон</label>
+                        <input type="text" class="form-control" id="phone" name="phone" placeholder="Поиск по телефону">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="name" class="form-label">Имя</label>
+                        <input type="text" class="form-control" id="name" name="name" placeholder="Поиск по имени">
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary">Применить фильтры</button>
+                        <button type="button" class="btn btn-secondary" onclick="resetFilters()">Сбросить</button>
+                    </div>
+                </form>
             </div>
         </div>
 
-        <div class="row" id="bookingsContainer">
-            {{range .}}
-            <div class="col-md-6 col-lg-4 mb-4">
-                <div class="card booking-card h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start mb-3">
-                            <h5 class="card-title mb-0">{{.Name}}</h5>
-                            <span class="badge {{if eq .Status "confirmed"}}bg-success{{else if eq .Status "cancelled"}}bg-danger{{else}}bg-warning{{end}} status-badge">
-                                {{if eq .Status "confirmed"}}Подтверждено{{else if eq .Status "cancelled"}}Отменено{{else}}Ожидает{{end}}
+        <!-- Таблица бронирований -->
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Имя</th>
+                        <th>Телефон</th>
+                        <th>Дата</th>
+                        <th>Время</th>
+                        <th>Гости</th>
+                        <th>Комментарии</th>
+                        <th>Статус</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .}}
+                    <tr>
+                        <td>{{.ID}}</td>
+                        <td>{{.Name}}</td>
+                        <td>{{formatPhone .Phone}}</td>
+                        <td>{{formatDate .Date}}</td>
+                        <td>{{formatTime .Time}}</td>
+                        <td>{{.Guests}}</td>
+                        <td>{{.Comments}}</td>
+                        <td>
+                            <span class="badge {{if eq .Status "pending"}}bg-warning{{else if eq .Status "confirmed"}}bg-success{{else if eq .Status "cancelled"}}bg-danger{{end}}">
+                                {{if eq .Status "pending"}}Ожидает{{else if eq .Status "confirmed"}}Подтверждено{{else if eq .Status "cancelled"}}Отменено{{else}}{{.Status}}{{end}}
                             </span>
-                        </div>
-                        <p class="card-text">
-                            <i class="bi bi-telephone"></i> {{.Phone}}<br>
-                            <i class="bi bi-calendar"></i> {{.Date}}<br>
-                            <i class="bi bi-clock"></i> {{.Time}}<br>
-                            <i class="bi bi-people"></i> {{.Guests}} гостей
-                        </p>
-                        {{if .Comments}}
-                        <p class="card-text"><small class="text-muted">{{.Comments}}</small></p>
-                        {{end}}
-                        <div class="btn-group w-100">
+                        </td>
+                        <td>
                             {{if eq .Status "pending"}}
-                            <button class="btn btn-success btn-sm" onclick="updateStatus({{.ID}}, 'confirmed')">
-                                <i class="bi bi-check-lg"></i> Подтвердить
-                            </button>
+                            <button class="btn btn-sm btn-success" onclick="updateStatus({{.ID}}, 'confirmed')">Подтвердить</button>
+                            <button class="btn btn-sm btn-danger" onclick="updateStatus({{.ID}}, 'cancelled')">Отменить</button>
+                            {{else if eq .Status "confirmed"}}
+                            <button class="btn btn-sm btn-danger" onclick="updateStatus({{.ID}}, 'cancelled')">Отменить</button>
                             {{end}}
-                            {{if ne .Status "cancelled"}}
-                            <button class="btn btn-danger btn-sm" onclick="updateStatus({{.ID}}, 'cancelled')">
-                                <i class="bi bi-x-lg"></i> Отменить
-                            </button>
-                            {{end}}
-                        </div>
-                    </div>
-                    <div class="card-footer text-muted">
-                        <small>Создано: {{.Created.Format "02.01.2006 15:04"}}</small>
-                    </div>
-                </div>
-            </div>
-            {{end}}
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Функция для сброса фильтров
+        function resetFilters() {
+            document.getElementById('date').value = '';
+            document.getElementById('status').value = '';
+            document.getElementById('phone').value = '';
+            document.getElementById('name').value = '';
+            document.getElementById('filterForm').submit();
+        }
+
+        // Обработка отправки формы фильтрации
+        document.getElementById('filterForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Собираем параметры фильтрации
+            const params = new URLSearchParams();
+            const date = document.getElementById('date').value;
+            const status = document.getElementById('status').value;
+            const phone = document.getElementById('phone').value;
+            const name = document.getElementById('name').value;
+            
+            if (date) params.append('date', date);
+            if (status) params.append('status', status);
+            if (phone) params.append('phone', phone);
+            if (name) params.append('name', name);
+            
+            // Обновляем URL и перезагружаем страницу
+            window.location.href = '/admin/bookings?' + params.toString();
+        });
+
         async function updateStatus(id, status) {
             try {
                 const response = await fetch(`/admin/bookings/${id}/status`, {
@@ -120,6 +182,51 @@
             document.cookie = 'session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
             window.location.href = '/admin/login';
         }
+
+        // Функции форматирования
+        function formatPhone(phone) {
+            // Убираем все нецифровые символы
+            const digits = phone.replace(/\D/g, '');
+            // Форматируем как +7 (XXX) XXX-XX-XX
+            return `+7 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7, 9)}-${digits.slice(9, 11)}`;
+        }
+
+        function formatDate(dateStr) {
+            // Проверяем, что строка имеет правильный формат YYYY-MM-DD
+            if (dateStr.length !== 10 || dateStr[4] !== '-' || dateStr[7] !== '-') {
+                return dateStr;
+            }
+            // Преобразуем YYYY-MM-DD в DD.MM.YYYY
+            const year = dateStr.substring(0, 4);
+            const month = dateStr.substring(5, 7);
+            const day = dateStr.substring(8, 10);
+            return `${day}.${month}.${year}`;
+        }
+
+        function formatTime(timeStr) {
+            // Возвращаем время как есть, так как оно уже в формате HH:MM
+            return timeStr;
+        }
+
+        // Применяем форматирование ко всем ячейкам при загрузке страницы
+        document.addEventListener('DOMContentLoaded', function() {
+            const rows = document.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                const phoneCell = row.cells[2];
+                const dateCell = row.cells[3];
+                const timeCell = row.cells[4];
+
+                if (phoneCell) {
+                    phoneCell.textContent = formatPhone(phoneCell.textContent);
+                }
+                if (dateCell) {
+                    dateCell.textContent = formatDate(dateCell.textContent);
+                }
+                if (timeCell) {
+                    timeCell.textContent = formatTime(timeCell.textContent);
+                }
+            });
+        });
     </script>
 </body>
 </html> 

@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -83,31 +84,89 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleCreateBooking(w http.ResponseWriter, r *http.Request) {
-	var booking Booking
-	if err := json.NewDecoder(r.Body).Decode(&booking); err != nil {
+	var bookingData struct {
+		Name     string `json:"name"`
+		Phone    string `json:"phone"`
+		Date     string `json:"date"`
+		Time     string `json:"time"`
+		Guests   string `json:"guests"`
+		Comments string `json:"comments"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&bookingData); err != nil {
 		log.Printf("Ошибка при разборе данных: %v", err)
 		http.Error(w, "Ошибка при разборе данных", http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("Получены данные бронирования: %+v", booking)
-
 	// Валидация данных
-	if booking.Name == "" || booking.Phone == "" || booking.Date == "" || booking.Time == "" || booking.Guests == "" {
+	if bookingData.Name == "" || bookingData.Phone == "" || bookingData.Date == "" || bookingData.Time == "" || bookingData.Guests == "" {
 		log.Printf("Не заполнены обязательные поля: name=%s, phone=%s, date=%s, time=%s, guests=%s",
-			booking.Name, booking.Phone, booking.Date, booking.Time, booking.Guests)
+			bookingData.Name, bookingData.Phone, bookingData.Date, bookingData.Time, bookingData.Guests)
 		http.Error(w, "Все обязательные поля должны быть заполнены", http.StatusBadRequest)
 		return
 	}
 
-	// Проверка даты
-	bookingDate, err := time.Parse("2006-01-02", booking.Date)
-	if err != nil {
-		log.Printf("Ошибка при парсинге даты %s: %v", booking.Date, err)
-		http.Error(w, "Неверный формат даты", http.StatusBadRequest)
+	// Форматируем телефон
+	phone := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, bookingData.Phone)
+
+	// Проверяем длину телефона
+	if len(phone) != 11 {
+		log.Printf("Неверный формат телефона: %s", bookingData.Phone)
+		http.Error(w, "Неверный формат телефона (должно быть 11 цифр)", http.StatusBadRequest)
 		return
 	}
 
+	// Проверяем, что телефон начинается с 7 или 8
+	if phone[0] != '7' && phone[0] != '8' {
+		log.Printf("Телефон должен начинаться с 7 или 8: %s", phone)
+		http.Error(w, "Телефон должен начинаться с 7 или 8", http.StatusBadRequest)
+		return
+	}
+
+	// Если телефон начинается с 8, заменяем на 7
+	if phone[0] == '8' {
+		phone = "7" + phone[1:]
+	}
+
+	// Проверяем формат даты
+	_, err := time.Parse("2006-01-02", bookingData.Date)
+	if err != nil {
+		log.Printf("Ошибка при проверке формата даты %s: %v", bookingData.Date, err)
+		http.Error(w, "Неверный формат даты (должен быть YYYY-MM-DD)", http.StatusBadRequest)
+		return
+	}
+
+	// Проверяем формат времени
+	timeStr := bookingData.Time
+	if len(timeStr) > 5 {
+		timeStr = timeStr[:5] // Берем только часы и минуты
+	}
+	_, err = time.Parse("15:04", timeStr)
+	if err != nil {
+		log.Printf("Ошибка при проверке формата времени %s: %v", bookingData.Time, err)
+		http.Error(w, "Неверный формат времени (должен быть HH:MM)", http.StatusBadRequest)
+		return
+	}
+
+	// Создаем объект бронирования
+	booking := Booking{
+		Name:     bookingData.Name,
+		Phone:    phone, // Используем отформатированный телефон
+		Date:     bookingData.Date,
+		Time:     timeStr,
+		Guests:   bookingData.Guests,
+		Comments: bookingData.Comments,
+		Status:   "pending",
+	}
+
+	// Проверяем, что дата не в прошлом
+	bookingDate, _ := time.Parse("2006-01-02", booking.Date)
 	if bookingDate.Before(time.Now().Truncate(24 * time.Hour)) {
 		log.Printf("Попытка бронирования на прошедшую дату: %s", booking.Date)
 		http.Error(w, "Дата бронирования не может быть в прошлом", http.StatusBadRequest)
@@ -115,9 +174,14 @@ func handleCreateBooking(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Сохранение бронирования
-	if err := db.CreateBooking(&booking); err != nil {
+	err = db.CreateBooking(&booking)
+	if err != nil {
 		log.Printf("Ошибка при создании бронирования: %v", err)
-		http.Error(w, fmt.Sprintf("Ошибка при создании бронирования: %v", err), http.StatusInternalServerError)
+		if err.Error() == "на эту дату уже существует активное бронирование для данного номера телефона" {
+			http.Error(w, err.Error(), http.StatusConflict)
+		} else {
+			http.Error(w, fmt.Sprintf("Ошибка при создании бронирования: %v", err), http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -199,10 +263,53 @@ func handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin", http.StatusSeeOther)
 }
 
+// Добавляем общую функцию для создания шаблона с функциями форматирования
+func createTemplateWithFuncs(filename string) (*template.Template, error) {
+	funcMap := template.FuncMap{
+		"formatPhone": func(phone string) string {
+			// Убираем все нецифровые символы
+			digits := strings.Map(func(r rune) rune {
+				if r >= '0' && r <= '9' {
+					return r
+				}
+				return -1
+			}, phone)
+
+			if len(digits) < 11 {
+				return phone // Возвращаем исходный номер, если он некорректный
+			}
+
+			// Форматируем как +7 (XXX) XXX-XX-XX
+			return fmt.Sprintf("+7 (%s) %s-%s-%s",
+				digits[1:4],
+				digits[4:7],
+				digits[7:9],
+				digits[9:11])
+		},
+		"formatDate": func(date string) string {
+			// Проверяем, что строка имеет правильный формат YYYY-MM-DD
+			if len(date) != 10 || date[4] != '-' || date[7] != '-' {
+				return date
+			}
+			// Преобразуем YYYY-MM-DD в DD.MM.YYYY
+			year := date[0:4]
+			month := date[5:7]
+			day := date[8:10]
+			return fmt.Sprintf("%s.%s.%s", day, month, year)
+		},
+		"formatTime": func(time string) string {
+			// Возвращаем время как есть, так как оно уже в формате HH:MM
+			return time
+		},
+	}
+
+	return template.New("home.html").Funcs(funcMap).ParseFiles(filename)
+}
+
 func handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Обработка запроса к /admin: метод=%s", r.Method)
 
-	tmpl, err := template.ParseFiles("templates/admin/home.html")
+	tmpl, err := createTemplateWithFuncs("templates/admin/home.html")
 	if err != nil {
 		log.Printf("Ошибка при загрузке шаблона home.html: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -224,14 +331,57 @@ func handleAdminHome(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAdminBookings(w http.ResponseWriter, r *http.Request) {
-	bookings, err := db.GetBookings()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	if r.Method == "GET" {
+		// Получаем параметры фильтрации
+		filters := make(map[string]string)
+		if date := r.URL.Query().Get("date"); date != "" {
+			filters["date"] = date
+		}
+		if status := r.URL.Query().Get("status"); status != "" {
+			filters["status"] = status
+		}
+		if phone := r.URL.Query().Get("phone"); phone != "" {
+			filters["phone"] = phone
+		}
+		if name := r.URL.Query().Get("name"); name != "" {
+			filters["name"] = name
+		}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(bookings)
+		// Получаем отфильтрованные бронирования
+		bookings, err := db.GetFilteredBookings(filters)
+		if err != nil {
+			log.Printf("Ошибка при получении бронирований: %v", err)
+			http.Error(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
+			return
+		}
+
+		// Логируем данные для отладки
+		for _, booking := range bookings {
+			log.Printf("Booking ID %d: Date='%s', Time='%s'",
+				booking.ID, booking.Date, booking.Time)
+		}
+
+		// Если это AJAX-запрос, возвращаем JSON
+		if r.Header.Get("X-Requested-With") == "XMLHttpRequest" {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(bookings)
+			return
+		}
+
+		// Парсим шаблон с функциями
+		tmpl, err := createTemplateWithFuncs("templates/admin/home.html")
+		if err != nil {
+			log.Printf("Ошибка при парсинге шаблона: %v", err)
+			http.Error(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
+			return
+		}
+
+		// Передаем только список бронирований в шаблон
+		if err := tmpl.Execute(w, bookings); err != nil {
+			log.Printf("Ошибка при рендеринге шаблона: %v", err)
+			http.Error(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
+		}
+	}
 }
 
 func handleUpdateBookingStatus(w http.ResponseWriter, r *http.Request) {
